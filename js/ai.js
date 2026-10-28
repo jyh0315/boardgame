@@ -164,8 +164,19 @@ function cardWorth(s, p, id) {
   if (id === 'AN01') v += 6;                           // 신경계: 매 턴 행동 +1
   if (id === 'ST09' && p.nodes.some(n => NODES[n].top)) v += 4; // 최상위 더미 진열 → 종료 가속
   if (id === 'PR01') v -= 4;
-  if (late > .7) v -= 3;
+  // 지도: 개체 1개 = 종료 시 단가(1~5점) + 우점·생태계 다양성 기대치
+  const pn = PLACE_N[id] ?? 0;
+  if (pn && E.markersLeft(s, p.id) > 0) v += Math.min(pn, E.markersLeft(s, p.id)) * (mapRate(p) + 1.8);
+  if (['PR02', 'AN04'].includes(id) && s.players.length > 1) v += 3;   // 제거 즉시 +1점, 상대 우점 깨기
+  if (late > .7) v -= pn ? 1 : 3;
   return v;
+}
+// 배치 카드가 놓는 개체 수 (강화 시 더 많을 수 있음)
+const PLACE_N = { ST05: 1, ST08: 1, ST09: 1, PK01: 2, PL02: 2.5, PL04: 2, HU01: 2, BA01: 3, FU01: 2, AR01: 2, AN02: 1 };
+// 종료 시 개체 단가: 지금 개방 상태 + 곧 진화할 것을 고려해 약간 높게
+function mapRate(p) {
+  const r = p.nodes.includes('HU') ? 5 : p.nodes.includes('AN') ? 3 : p.nodes.includes('PL') ? 2 : 1;
+  return r + (r < 3 && ['AN', 'PL'].includes(preferredTops(p.id)[0]) ? 0.8 : 0);
 }
 
 // 진열할 계통 더미: 내가 사고 싶은 카드 우선 (★는 최초 개방자만 살 수 있으니 가산)
