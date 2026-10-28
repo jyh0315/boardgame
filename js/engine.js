@@ -19,7 +19,7 @@ export function createGame(playerList) {
   const players = shuffle([...playerList]).map((p, i) => {
     const deck = shuffle([...Array(7).fill('RS01'), ...Array(3).fill('VP01')]);
     return {
-      id: p.id, name: p.name, color: PLAYER_COLORS[i],
+      id: p.id, name: p.name, color: PLAYER_COLORS[i], ai: !!p.ai,
       deck, hand: deck.splice(0, 5), discard: [], slots: [], evoPaid: [],
       nodes: ['LUCA'], evoTarget: null, evoProg: { dna: 0, prot: 0 },
       research: 0, traitStage: 0, traits: [], ach: [], removal: 0, achPts: 0,
@@ -43,7 +43,7 @@ export function createGame(playerList) {
 // 공급 수량: 자원은 인원수에 비례 (data.js SUPPLY는 2인 기준)
 function scaledSupply(n) {
   const s = { ...SUPPLY };
-  s.RS01 += (n - 2) * 10; s.RS02 += (n - 2) * 6; s.RS03 += (n - 2) * 6; s.VP04 += (n - 2) * 4;
+  s.RS01 += (n - 2) * 10; s.RS02 += (n - 2) * 10; s.RS03 += (n - 2) * 10; s.VP04 += (n - 2) * 4;
   return s;
 }
 

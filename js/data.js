@@ -100,7 +100,7 @@ export const STARTER_PILES = ['RS01', 'RS02', 'RS03', 'VP02', 'VP03', 'VP04',
 
 // 공용 공급 수량 (2인 기준, 베타용 — 필요하면 조정). 자원·유해 돌연변이는 인원이 늘면 engine.js에서 자동 증가
 export const SUPPLY = {
-  RS01: 40, RS02: 26, RS03: 24, VP02: 12, VP03: 10, VP04: 12,
+  RS01: 40, RS02: 34, RS03: 32, VP02: 12, VP03: 10, VP04: 12,
   ST01: 8, ST02: 8, ST03: 8, ST04: 8, ST05: 8, ST06: 8, ST07: 8, ST08: 8, ST09: 8, ST10: 8,
 };
 export const LINEAGE_COPIES = 4;

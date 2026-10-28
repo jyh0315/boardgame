@@ -76,13 +76,14 @@ export class FirebaseNet {
     await update(this.r(`rooms/${code}/info`), { status: 'playing' });
   }
 
-  async act(code, action) {
+  async act(code, action, asPid) {
     const { runTransaction } = this.f;
+    const pid = asPid || this.uid;
     let err = null;
     await runTransaction(this.r(`rooms/${code}/state`), cur => {
       err = null;
       if (cur == null) return cur; // 로컬 캐시가 비어 있으면 서버 값으로 재시도됨
-      try { return JSON.stringify(applyAction(JSON.parse(cur), this.uid, action)); }
+      try { return JSON.stringify(applyAction(JSON.parse(cur), pid, action)); }
       catch (e) { err = e; return undefined; }
     });
     if (err) throw err;
@@ -91,6 +92,18 @@ export class FirebaseNet {
   async chat(code, name, text) {
     const { push } = this.f;
     await push(this.r(`rooms/${code}/chat`), { uid: this.uid, name, text: String(text).slice(0, 300), t: Date.now() });
+  }
+
+  async addAI(code, name) {
+    const { get, set } = this.f;
+    const ps = (await get(this.r(`rooms/${code}/players`))).val() || {};
+    if (Object.keys(ps).length >= 6) throw new Error('최대 6인입니다.');
+    const id = 'ai' + Math.random().toString(36).slice(2, 8);
+    await set(this.r(`rooms/${code}/players/${id}`), { name, t: Date.now(), ai: true });
+  }
+  async removeAI(code, id) {
+    const { remove } = this.f;
+    await remove(this.r(`rooms/${code}/players/${id}`));
   }
 
   async leaveLobby(code) {
@@ -103,10 +116,10 @@ export class FirebaseNet {
 export class LocalNet {
   constructor() { this.uid = null; this.room = null; this.cb = null; }
   async init() { }
-  setup(names) {
-    const players = names.map((n, i) => ({ id: 'L' + i, name: n }));
+  setup(seats) {
+    const players = seats.map((x, i) => ({ id: 'L' + i, name: x.name, ai: !!x.ai }));
     this.room = { info: { host: 'L0', status: 'playing' }, players: {}, state: createGame(players), chat: [] };
-    players.forEach(p => this.room.players[p.id] = { name: p.name, t: 0 });
+    players.forEach(p => this.room.players[p.id] = { name: p.name, t: 0, ai: p.ai });
     this.save();
   }
   restore() {

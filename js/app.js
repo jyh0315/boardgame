@@ -4,12 +4,14 @@ import {
   CARDS, TERRAIN, NODES, LINEAGES, TRAITS, TRAIT_COST, RESEARCH, ACHIEVEMENTS, STARTER_PILES, MARKERS,
 } from './data.js';
 import { FirebaseNet, LocalNet, getUid } from './net.js';
+import { aiAction, aiToMove } from './ai.js';
 import { firebaseConfig } from './firebase-config.js';
 
 const $ = sel => document.querySelector(sel);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clone = o => JSON.parse(JSON.stringify(o));
 const img = id => `img/cards/${id}.jpg`;
+const AI_NAMES = ['다윈', '멘델', '린네', '월리스', '라마르크'];
 const TICON = { G: '🌾', W: '🌊', F: '🌲', D: '🏜️' };
 const configured = !!firebaseConfig?.databaseURL && !/your-project/i.test(firebaseConfig.databaseURL);
 
@@ -25,10 +27,15 @@ function actorId() {
   const s = S();
   if (!s) return V.uid;
   if (V.mode !== 'local') return V.uid;
+  // 로컬: 지금 행동해야 하는 사람 플레이어. AI 차례면 마지막으로 조작한 사람 시점 유지
   const pd = s.pending;
-  if (pd?.kind === 'attack') { const t = pd.targets.find(t => pd.resp[t] == null); if (t) return t; }
-  if (s.phase === 'setup') return s.players[s.players.length - 1 - s.setupStep].id;
-  return E.curPlayer(s).id;
+  let id;
+  if (pd?.kind === 'attack') id = pd.targets.find(t => pd.resp[t] == null);
+  if (!id) id = s.phase === 'setup' ? s.players[s.players.length - 1 - s.setupStep].id : s.phase === 'play' ? E.curPlayer(s).id : null;
+  const human = id && !s.players.find(p => p.id === id)?.ai ? id : null;
+  if (human) V.lastHuman = human;
+  if (!s.players.some(p => p.id === V.lastHuman && !p.ai)) V.lastHuman = s.players.find(p => !p.ai)?.id;
+  return human || V.lastHuman || s.players[0].id;
 }
 const meP = () => S()?.players.find(p => p.id === actorId());
 const pById = id => S()?.players.find(p => p.id === id);
@@ -456,8 +463,13 @@ function renderHome() {
         <div class="join-row"><input id="code" maxlength="4" placeholder="방 코드" value="${esc(code)}"><button data-act="join">참가</button></div>
       ` : `<div class="warn">Firebase 설정이 아직 없습니다. <code>js/firebase-config.js</code>를 채우면 온라인 방을 만들 수 있어요. 지금은 아래 로컬 테스트만 가능합니다.</div>`}
       <hr>
-      <details ${configured ? '' : 'open'}><summary>한 화면 로컬 테스트 (오프라인)</summary>
-        <p class="note">한 기기에서 여러 명이 번갈아 플레이합니다. 규칙 확인용.</p>
+      <div class="ai-box"><b>🤖 AI와 대전</b> <small>(혼자 연습, 인터넷 연결 불필요)</small>
+        <div class="row"><label>AI 수 <select id="aicount">${[1, 2, 3, 4, 5].map(n => `<option ${n === 2 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label>속도 <select id="aispeed"><option value="1.6">느리게</option><option value="1" selected>보통</option><option value="0.4">빠르게</option></select></label>
+        <button class="primary" data-act="vs-ai">AI와 시작</button></div>
+      </div>
+      <details><summary>한 화면 로컬 테스트 (오프라인)</summary>
+        <p class="note">한 기기에서 여러 명이 번갈아 플레이합니다. 이름 앞에 <b>AI</b>를 붙이면(예: AI 철수) 컴퓨터가 맡습니다.</p>
         <textarea id="lnames" rows="3" placeholder="플레이어 이름을 줄마다 (2~6명)">플레이어1\n플레이어2\n플레이어3</textarea>
         <div class="row"><button data-act="local">로컬 게임 시작</button>
         <button data-act="local-resume" class="ghost">이어하기</button></div>
@@ -475,8 +487,10 @@ function renderLobby() {
     <div class="room-code">${V.code}</div>
     <p class="note">친구에게 방 코드나 링크를 보내세요.</p>
     <div class="join-row"><input readonly value="${esc(link)}" id="lnk"><button data-act="copy">복사</button></div>
-    <ul class="lobby-list">${players.map(([id, p], i) => `<li><span class="dot" style="background:#999"></span>${esc(p.name)} ${id === r.info?.host ? '<em>(방장)</em>' : ''} ${id === V.uid ? '<em>(나)</em>' : ''}</li>`).join('')}</ul>
+    <ul class="lobby-list">${players.map(([id, p], i) => `<li><span class="dot" style="background:#999"></span>${p.ai ? '🤖 ' : ''}${esc(p.name)} ${id === r.info?.host ? '<em>(방장)</em>' : ''} ${id === V.uid ? '<em>(나)</em>' : ''}</li>`).join('')}</ul>
     <p class="note">${players.length}/6명 · 2명 이상이면 시작할 수 있습니다.</p>
+    ${isHost ? `<div class="row"><button data-act="add-ai" ${players.length >= 6 ? 'disabled' : ''}>🤖 AI 추가</button><button class="ghost" data-act="remove-ai" ${players.some(([, p]) => p.ai) ? '' : 'disabled'}>AI 빼기</button></div>
+      <p class="note">AI 차례는 방장 브라우저가 진행합니다. 방장이 창을 닫으면 AI가 멈춰요.</p>` : ''}
     ${isHost ? `<button class="primary big" data-act="start" ${players.length < 2 ? 'disabled' : ''}>게임 시작</button>` : '<p>방장이 시작하기를 기다리는 중…</p>'}
     <button class="ghost" data-act="leave">나가기</button>
   </div></div>`;
@@ -548,7 +562,7 @@ function playersHTML(s) {
   return s.players.map(p => {
     const sc = E.computeScore(s, p);
     return `<div class="pbox ${p.id === cur ? 'current' : ''}" style="--pc:${p.color}">
-      <div class="pb-head"><span class="dot" style="background:${p.color}"></span><b>${esc(p.name)}</b>${p.id === V.uid && V.mode !== 'local' ? '<em>나</em>' : ''}
+      <div class="pb-head"><span class="dot" style="background:${p.color}"></span><b>${p.ai ? '🤖 ' : ''}${esc(p.name)}</b>${p.id === V.uid && V.mode !== 'local' ? '<em>나</em>' : ''}
         <span class="score" title="현재 기준 예상 점수">${sc.total}점</span></div>
       <div class="pb-stats">손패 ${p.hand.length} · 덱 ${p.deck.length} · 버림 ${p.discard.length} · 지불더미 ${p.evoPaid.length} · 개체 ${E.markersOnMap(s, p.id)}/${MARKERS}</div>
       <div class="pb-stats">계통: ${p.nodes.filter(n => n !== 'LUCA').map(n => NODES[n].name).join(', ') || 'LUCA'}${p.evoTarget ? ` <span class="tgt">→ ${NODES[p.evoTarget].name} (${p.evoProg.dna}/${E.evoReq(p, p.evoTarget).dna}·${p.evoProg.prot}/${E.evoReq(p, p.evoTarget).prot})</span>` : ''}</div>
@@ -699,6 +713,32 @@ function render() {
   if (chatVal != null) { const i = document.querySelector('.chat-form input'); if (i) { i.value = chatVal; if (focused) i.focus(); } }
 }
 
+// ───────────────────────── AI 진행 ─────────────────────────
+// 로컬 모드는 이 브라우저가, 온라인은 방장 브라우저가 AI 차례를 대신 진행한다
+const AI_DELAY = { setupPlace: 500, discardChoice: 350, defend: 600, endTurn: 900 };
+function scheduleAI() {
+  const s = S();
+  if (!s || V.aiTimer) return;
+  if (V.mode === 'online' && V.room?.info?.host !== V.uid) return;
+  const pid = aiToMove(s);
+  if (!pid) return;
+  const a0 = aiAction(s, pid);
+  const delay = (AI_DELAY[a0?.type] ?? 800) * (V.aiSpeed || 1);
+  V.aiTimer = setTimeout(async () => {
+    V.aiTimer = null;
+    const st = S();
+    const id = aiToMove(st);
+    if (!id) return;
+    const a = aiAction(st, id) || { type: 'endTurn' };
+    try { await V.net.act(V.code, a, id); }
+    catch (e) {
+      console.warn('AI 행동 실패', a, e);
+      try { await V.net.act(V.code, aiToMove(S()) === id && S().pending ? { type: 'defend', card: null } : { type: 'endTurn' }, id); } catch { }
+    }
+    scheduleAI();
+  }, delay);
+}
+
 // ───────────────────────── 방 상태 수신 ─────────────────────────
 function onRoom(room) {
   V.room = room;
@@ -709,11 +749,13 @@ function onRoom(room) {
   }
   render();
   handlePending();
+  scheduleAI();
   const s = room.state;
   if (s?.phase === 'ended' && !V.endShown) { V.endShown = true; showScores(); }
 }
 
 function goHome() {
+  clearTimeout(V.aiTimer); V.aiTimer = null;
   V.net?.stop?.(); V.screen = 'home'; V.room = null; V.code = null; V.picking = null; V.endShown = false;
   history.replaceState(null, '', location.pathname);
   render();
@@ -790,11 +832,20 @@ document.addEventListener('click', async e => {
       } catch (err) { console.error(err); toast('⚠ 연결 실패: ' + err.message, 5000); }
       break;
     }
-    case 'local': {
-      const names = $('#lnames').value.split('\n').map(x => x.trim()).filter(Boolean);
-      if (names.length < 2 || names.length > 6) return toast('2~6명의 이름을 입력하세요.');
-      V.net = new LocalNet(); V.mode = 'local'; V.code = 'LOCAL';
-      V.net.setup(names); V.screen = 'game'; V.endShown = false;
+    case 'vs-ai': case 'local': {
+      let seats;
+      if (d.act === 'vs-ai') {
+        const name = $('#nm').value.trim() || '나';
+        V.name = name; try { localStorage.setItem('tol_name', name); } catch { }
+        V.aiSpeed = +$('#aispeed').value;
+        seats = [{ name }, ...Array.from({ length: +$('#aicount').value }, (_, i) => ({ name: `AI ${AI_NAMES[i]}`, ai: true }))];
+      } else {
+        seats = $('#lnames').value.split('\n').map(x => x.trim()).filter(Boolean).map(n => ({ name: n, ai: /^AI(\s|$)/i.test(n) }));
+        if (seats.length < 2 || seats.length > 6) return toast('2~6명의 이름을 입력하세요.');
+        if (!seats.some(x => !x.ai)) return toast('사람 플레이어가 1명 이상 있어야 합니다.');
+      }
+      V.net = new LocalNet(); V.mode = 'local'; V.code = 'LOCAL'; V.lastHuman = null;
+      V.net.setup(seats); V.screen = 'game'; V.endShown = false;
       V.net.watch(V.code, onRoom);
       break;
     }
@@ -807,8 +858,18 @@ document.addEventListener('click', async e => {
     }
     case 'copy': navigator.clipboard?.writeText($('#lnk').value).then(() => toast('링크를 복사했습니다.')); break;
     case 'start': {
-      const players = Object.entries(V.room.players).sort((a, b) => a[1].t - b[1].t).map(([id, p]) => ({ id, name: p.name }));
+      const players = Object.entries(V.room.players).sort((a, b) => a[1].t - b[1].t).map(([id, p]) => ({ id, name: p.name, ai: !!p.ai }));
       try { await V.net.start(V.code, players); } catch (err) { toast('⚠ ' + err.message); }
+      break;
+    }
+    case 'add-ai': {
+      const ais = Object.values(V.room.players).filter(p => p.ai).length;
+      try { await V.net.addAI(V.code, `AI ${AI_NAMES[ais % AI_NAMES.length]}`); } catch (err) { toast('⚠ ' + err.message); }
+      break;
+    }
+    case 'remove-ai': {
+      const last = Object.entries(V.room.players).filter(([, p]) => p.ai).sort((a, b) => b[1].t - a[1].t)[0];
+      if (last) try { await V.net.removeAI(V.code, last[0]); } catch (err) { toast('⚠ ' + err.message); }
       break;
     }
     case 'leave': try { await V.net.leaveLobby(V.code); } catch { } goHome(); break;
