@@ -82,7 +82,7 @@ function useParams(s, p, id) {
     case 'ST08': return { mode: 'place', places: bestPlaces(s, p, 1 + F) };
     case 'ST09': {
       const opts = p.nodes.filter(n => n !== 'LUCA').flatMap(l => E.displayOptions(s, l));
-      return { display: opts.sort((a, b) => (CARDS[b].star - CARDS[a].star))[0] || null, places: bestPlaces(s, p, 1 + F) };
+      return { display: pickDisplay(s, p, opts), places: bestPlaces(s, p, 1 + F) };
     }
     case 'PK01': return { places: bestPlaces(s, p, 2 + F) };
     case 'PL02': return { places: bestPlaces(s, p, (enh ? 3 : 2) + F) };
@@ -159,11 +159,20 @@ function cardWorth(s, p, id) {
   else v -= copies * 1.5;
   if (c.tags.includes('persist')) v += E.PER_TURN.includes(id) ? 4 : 1.5;
   if (c.tags.includes('defense')) v -= 2;
-  if (['ST01', 'ST02'].includes(id)) v += 1.5;
+  if (id === 'ST02') v += 3 + copies * 1.2;          // ATP: 순수 행동 +1 → 여러 장 가질 가치
+  if (id === 'ST01') v -= 0.5;                         // 효소: 행동 순증가 없음
+  if (id === 'AN01') v += 6;                           // 신경계: 매 턴 행동 +1
   if (id === 'ST09' && p.nodes.some(n => NODES[n].top)) v += 4; // 최상위 더미 진열 → 종료 가속
   if (id === 'PR01') v -= 4;
   if (late > .7) v -= 3;
   return v;
+}
+
+// 진열할 계통 더미: 내가 사고 싶은 카드 우선 (★는 최초 개방자만 살 수 있으니 가산)
+function pickDisplay(s, p, opts) {
+  if (!opts.length) return null;
+  const v = id => cardWorth(s, p, id) + (CARDS[id].star && (!s.starOwner[CARDS[id].lin] || s.starOwner[CARDS[id].lin] === p.id) ? 1.5 : 0);
+  return [...opts].sort((a, b) => v(b) - v(a))[0];
 }
 
 // ───────── 메인 ─────────
@@ -214,7 +223,15 @@ function candidates(s, p) {
   const has = id => hand.includes(id);
 
   // 1) 행동을 늘려 주는 카드
-  ['ST02', 'ST01'].forEach(id => has(id) && use(id));
+  // ATP는 늘어난 행동을 실제로 쓸 수 있을 때만 (쓸 데 없으면 단백질만 낭비)
+  if (has('ST02')) {
+    const m = E.money(s, p);
+    const others = [...new Set(hand)].filter(id => id !== 'ST02' && CARDS[id].kind === 'ability' && !CARDS[id].tags.includes('defense')
+      && (!CARDS[id].tags.includes('persist') || p.slots.length < E.slotCap(p))).length;
+    const evoCards = cnt(hand, 'RS03') + Math.max(0, cnt(hand, 'RS02') - 1);
+    const uses = (m >= 4 ? 1 : 0) + (m >= 8 ? 1 : 0) + others + (evoCards > 0 && nextEvoTarget(p) ? 1 : 0);
+    if (uses >= 2 && cnt(hand, 'RS02') >= E.protNeed(p, 'ST02')) use('ST02');
+  }
 
   // 2) 진화: 완성되거나 2장 이상 낼 수 있으면
   const tgt = nextEvoTarget(p);
@@ -223,7 +240,7 @@ function candidates(s, p) {
     const d = Math.min(cnt(hand, 'RS03'), req.dna - (p.evoTarget ? p.evoProg.dna : 0));
     const pr = Math.min(cnt(hand, 'RS02'), req.prot - (p.evoTarget ? p.evoProg.prot : 0));
     const done = (p.evoTarget ? p.evoProg.dna : 0) + d >= req.dna && (p.evoTarget ? p.evoProg.prot : 0) + pr >= req.prot;
-    const opts = E.displayOptions(s, tgt).sort((a, b) => CARDS[b].star - CARDS[a].star);
+    const opts = [pickDisplay(s, p, E.displayOptions(s, tgt))];
     const ev = { type: 'evolve', target: tgt, dna: d, prot: pr, display: opts[0] };
     if (done || d + pr >= 2) out.push(ev);
     else if (d + pr >= 1 && s.actions >= 2) out.push(ev);
@@ -261,7 +278,7 @@ function candidates(s, p) {
     const req = E.evoReq(p, tgt);
     const d = Math.min(cnt(hand, 'RS03'), req.dna - (p.evoTarget ? p.evoProg.dna : 0));
     const pr = Math.min(cnt(hand, 'RS02'), req.prot - (p.evoTarget ? p.evoProg.prot : 0));
-    if (d + pr >= 1) out.push({ type: 'evolve', target: tgt, dna: d, prot: pr, display: E.displayOptions(s, tgt)[0] });
+    if (d + pr >= 1) out.push({ type: 'evolve', target: tgt, dna: d, prot: pr, display: pickDisplay(s, p, E.displayOptions(s, tgt)) });
   }
   return out;
 }
