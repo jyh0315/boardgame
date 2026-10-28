@@ -15,17 +15,18 @@ export const LINEAGES = {
 };
 
 // 진화 노드. end = 그 계통 더미가 진열될 때 종료 트랙 가산
+// 베타 수정안: 진핵 2/2→1/1, 원생 3/2→2/1, 식물·동물·균류 4/3→3/2, 인간 6/4→4/3 (DNA/단백질)
 export const NODES = {
   LUCA: { name: 'LUCA', pre: null, dna: 0, prot: 0, end: 0 },
   PK: { name: '원핵생물', pre: 'LUCA', dna: 1, prot: 1, end: 0 },
-  EK: { name: '진핵생물', pre: 'PK', dna: 2, prot: 2, end: 0 },
-  PR: { name: '원생생물', pre: 'EK', dna: 3, prot: 2, end: 0 },
-  PL: { name: '식물', pre: 'PR', dna: 4, prot: 3, end: 4, top: true },
-  AN: { name: '동물', pre: 'PR', dna: 4, prot: 3, end: 4, top: true },
-  FU: { name: '균류', pre: 'PR', dna: 4, prot: 3, end: 4, top: true },
+  EK: { name: '진핵생물', pre: 'PK', dna: 1, prot: 1, end: 0 },
+  PR: { name: '원생생물', pre: 'EK', dna: 2, prot: 1, end: 0 },
+  PL: { name: '식물', pre: 'PR', dna: 3, prot: 2, end: 4, top: true },
+  AN: { name: '동물', pre: 'PR', dna: 3, prot: 2, end: 4, top: true },
+  FU: { name: '균류', pre: 'PR', dna: 3, prot: 2, end: 4, top: true },
   BA: { name: '세균', pre: 'PK', dna: 2, prot: 2, end: 2, top: true },
   AR: { name: '고세균', pre: 'PK', dna: 2, prot: 2, end: 2, top: true },
-  HU: { name: '인간', pre: 'AN', dna: 6, prot: 4, end: 4, top: true },
+  HU: { name: '인간', pre: 'AN', dna: 4, prot: 3, end: 4, top: true },
 };
 export const NODE_ORDER = ['LUCA', 'PK', 'EK', 'PR', 'PL', 'AN', 'FU', 'BA', 'AR', 'HU'];
 

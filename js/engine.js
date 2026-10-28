@@ -5,6 +5,9 @@ import {
   TRAITS, TRAIT_COST, TRAIT_SCORE, RESEARCH, ACHIEVEMENTS, PLAYER_COLORS, MARKERS, MAP_LAYOUT, LINEAGES,
 } from './data.js';
 
+// 베타 수정안: 기본 행동 2회 (설명서 원안은 1회)
+export const BASE_ACTIONS = 2;
+
 const clone = o => JSON.parse(JSON.stringify(o));
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const fail = msg => { throw new Error(msg); };
@@ -396,7 +399,7 @@ function addDiscard(s, p, n, why) {
 
 function startTurn(s) {
   const p = curPlayer(s);
-  s.actions = 1; s.tf = {};
+  s.actions = BASE_ACTIONS; s.tf = {};
   delete s.dormant[p.id];
   log(s, `── ${p.name}의 턴 (라운드 ${s.round}) ──`);
   for (const id of p.slots) if (PER_TURN.includes(id)) perTurn(s, p, id);
